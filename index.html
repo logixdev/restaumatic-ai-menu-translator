@@ -106,6 +106,7 @@
                         <input type="text" id="apiKeyInput" class="form-control pe-5" placeholder="Przykładowo: AIzaSy..., sk-...">
                         <span class="position-absolute top-50 end-0 translate-middle-y me-3 text-muted" style="cursor: pointer;" id="clearApiKeyField">&times;</span>
                     </div>
+                    <div id="apiValidationMessage" class="text-center mb-2"></div>
                     <p class="text-center text-muted small mb-3" id="apiTypeText"></p>
                     <button class="btn btn-primary w-100 btn-active" id="saveKeyBtn">Zapisz klucz</button>
                 </div>
@@ -227,27 +228,37 @@
             }
         });
 
+        async function saveApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (key) {
+                const validationMsg = document.getElementById('apiValidationMessage');
+                validationMsg.innerHTML = '<span class="text-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sprawdzam połączenie z API...</span>';
+                const canTranslate = await testApiConnectivity(key);
+                if (canTranslate) {
+                    validationMsg.innerHTML = '<span class="text-success">✅ Klucz API jest poprawny.</span>';
+                    localStorage.setItem('multiAiApiKey', key);
+                    updateApiInfo();
+                    setTimeout(() => {
+                        const modal = bootstrap.Modal.getInstance('#apiKeyModal');
+                        if (modal) {
+                            document.getElementById('apiKeyInput').blur();
+                            document.getElementById('saveKeyBtn').blur();
+                            modal.hide();
+                        }
+                        document.getElementById('mainContent').classList.remove('content-blur');
+                        showToast('Klucz API został zapisany.', 'success');
+                    }, 1000);
+                } else {
+                    validationMsg.innerHTML = '<span class="text-danger">❌ Klucz API jest niepoprawny lub API nie odpowiada. Sprawdź poprawność klucza i spróbuj ponownie.</span>';
+                }
+            }
+        }
+
         function checkApiKey() {
             if (!localStorage.getItem('multiAiApiKey')) {
                 const modal = new bootstrap.Modal('#apiKeyModal');
                 modal.show();
                 document.getElementById('mainContent').classList.add('content-blur');
-            }
-        }
-
-        function saveApiKey() {
-            const key = document.getElementById('apiKeyInput').value.trim();
-            if (key) {
-                localStorage.setItem('multiAiApiKey', key);
-                document.getElementById('mainContent').classList.remove('content-blur');
-                const modal = bootstrap.Modal.getInstance('#apiKeyModal');
-                if (modal) {
-                    document.getElementById('apiKeyInput').blur();
-                    document.getElementById('saveKeyBtn').blur();
-                    modal.hide();
-                }
-                showToast('Klucz API został zapisany.', 'success');
-                updateApiInfo();
             }
         }
 
