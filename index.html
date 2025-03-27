@@ -5,6 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Przetłumacz menu z systemu Restaumatic na dowolny, obsługiwany język przy pomocy AI.">
     <meta name="robots" content="noindex">
+    <link rel="apple-touch-icon" sizes="57x57" href="/apple-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="/apple-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="/apple-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="/apple-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/apple-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="/apple-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/apple-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png">
+    <link rel="icon" type="image/png" sizes="192x192"  href="/android-icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+    <meta name="theme-color" content="#ffffff">
     <title>Tłumacz menu AI</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://bootswatch.com/5/morph/bootstrap.min.css" rel="stylesheet">
@@ -214,6 +231,7 @@
         let currentToast = null;
         let isTranslating = false;
         let translatedCount = 0;
+        let translationCache = {};
 
         document.addEventListener('DOMContentLoaded', function() {
             checkApiKey();
@@ -441,38 +459,12 @@
             }
         }
 
-        async function deepTranslate(obj, targetLang) {
-            const stack = [obj];
-            while (stack.length > 0) {
-                const current = stack.pop();
-                if (current && typeof current === 'object') {
-                    for (const key in current) {
-                        if (key === 'pl' && typeof current === 'object' && !current[targetLang]) {
-                            current[targetLang] = await translateText(current[key], targetLang);
-                            translatedCount++;
-                            updateProgress();
-                        }
-                        if (typeof current[key] === 'object') {
-                            stack.push(current[key]);
-                        }
-                    }
-                }
-            }
-            return obj;
-        }
-
-        function updateProgress() {
-            const progress = Math.round((translatedCount / translationsCount) * 100);
-            const toastBody = document.querySelector('#infoToast .toast-body');
-            if (toastBody) {
-                toastBody.textContent = `Trwa tłumaczenie... (${Math.min(progress, 100)}%)`;
-            }
-        }
-
-        async function translateText(text, targetLang) {
-            if (!text || typeof text !== 'string') return text;
+        async function batchTranslate(texts, targetLang) {
             const key = localStorage.getItem('multiAiApiKey');
-            const prompt = `Przetłumacz dokładnie ten tekst menu restauracji z polskiego na ${targetLang}. Zachowaj oryginalne nazwy tradycyjnych potraw (np. pierogi, żurek). Nie dodawaj żadnych nowych znaków (np. cudzysłowów, nawiasów, kropek), których nie było w oryginale. Nie zmieniaj formatowania. Zwróć TYLKO przetłumaczony tekst – dokładnie w tej samej formie i strukturze, co oryginał. Tekst: ${text}`;
+            let prompt = `Przetłumacz dokładnie poniższe frazy menu restauracji z polskiego na ${targetLang}. Zachowaj oryginalne nazwy tradycyjnych potraw. Nie dodawaj żadnych nowych znaków, których nie było w oryginale. Nie zmieniaj formatowania. Zwróć tłumaczenia oddzielone separatorem |||.\n`;
+            texts.forEach((text, index) => {
+                prompt += (index + 1) + '. ' + text + '\n';
+            });
             if (key.startsWith('AIza')) {
                 try {
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
@@ -489,13 +481,13 @@
                     if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0] || !data.candidates[0].content.parts[0].text) {
                         throw new Error('Nieprawidłowy format odpowiedzi');
                     }
-                    let translated = data.candidates[0].content.parts[0].text
-                        .replace(/^["']|["']$/g, '')
-                        .trim();
-                    return translated || text;
+                    let translated = data.candidates[0].content.parts[0].text.replace(/^["']|["']$/g, '').trim();
+                    let results = translated.split("|||").map(item => item.trim());
+                    if(results.length !== texts.length) throw new Error('Liczba tłumaczeń nie zgadza się z liczbą fraz');
+                    return results;
                 } catch (error) {
-                    console.error('Błąd tłumaczenia tekstu (Gemini):', text, error);
-                    return text;
+                    console.error('Błąd tłumaczenia wsadowego (Google):', error);
+                    return texts;
                 }
             } else {
                 try {
@@ -516,14 +508,56 @@
                     if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
                         throw new Error('Nieprawidłowy format odpowiedzi');
                     }
-                    let translated = data.choices[0].message.content
-                        .replace(/^["']|["']$/g, '')
-                        .trim();
-                    return translated || text;
+                    let translated = data.choices[0].message.content.replace(/^["']|["']$/g, '').trim();
+                    let results = translated.split("|||").map(item => item.trim());
+                    if(results.length !== texts.length) throw new Error('Liczba tłumaczeń nie zgadza się z liczbą fraz');
+                    return results;
                 } catch (error) {
-                    console.error('Błąd tłumaczenia tekstu (OpenAI):', text, error);
-                    return text;
+                    console.error('Błąd tłumaczenia wsadowego (OpenAI):', error);
+                    return texts;
                 }
+            }
+        }
+
+        async function deepTranslate(obj, targetLang) {
+            let fields = [];
+            function collect(o) {
+                if (o && typeof o === 'object') {
+                    for (const key in o) {
+                        if (key === 'pl' && typeof o[key] === 'string' && !o[targetLang]) {
+                            if(translationCache[o[key]]) {
+                                o[targetLang] = translationCache[o[key]];
+                                translatedCount++;
+                                updateProgress();
+                            } else {
+                                fields.push({ parent: o, text: o[key] });
+                            }
+                        }
+                        if (typeof o[key] === 'object') {
+                            collect(o[key]);
+                        }
+                    }
+                }
+            }
+            collect(obj);
+            let textsToTranslate = fields.map(item => item.text);
+            if(textsToTranslate.length > 0) {
+                const translations = await batchTranslate(textsToTranslate, targetLang);
+                for (let i = 0; i < fields.length; i++) {
+                    fields[i].parent[targetLang] = translations[i];
+                    translationCache[fields[i].text] = translations[i];
+                    translatedCount++;
+                    updateProgress();
+                }
+            }
+            return obj;
+        }
+
+        function updateProgress() {
+            const progress = Math.round((translatedCount / translationsCount) * 100);
+            const toastBody = document.querySelector('#infoToast .toast-body');
+            if (toastBody) {
+                toastBody.textContent = `Trwa tłumaczenie... (${Math.min(progress, 100)}%)`;
             }
         }
 
@@ -548,7 +582,6 @@
         function downloadFile(data, lang) {
             try {
                 const pad = num => num.toString().padStart(2, '0');
-
                 const date = new Date();
                 const timestamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
                 const blob = new Blob([JSON.stringify(data, null, 0)], {type: 'application/json'});
@@ -616,7 +649,7 @@
             const infoText = document.getElementById('apiInfoText');
             if (infoText) {
                 infoText.innerHTML = `Tłumaczenie realizowane przy pomocy AI 🤖 (użyte API: ${apiUsed}) - może zawierać błędy.<br>
-            <a href="mailto:kontakt@michalkansy.pl" class="text-muted">Prześlij opinię</a>`;
+                <a href="mailto:kontakt@michalkansy.pl" class="text-muted">Prześlij opinię</a>`;
             }
         }
     </script>
