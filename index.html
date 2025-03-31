@@ -459,6 +459,7 @@
             }
         }
 
+        // Warning - integration with OpenAI has not been tested yet - it may not work properly.
         async function batchTranslate(texts, targetLang) {
             const key = localStorage.getItem('multiAiApiKey');
             let prompt = `Przetłumacz dokładnie poniższe frazy menu restauracji z polskiego na ${targetLang}. Zachowaj oryginalne nazwy tradycyjnych potraw. Nie dodawaj żadnych nowych znaków, których nie było w oryginale. Nie zmieniaj formatowania. Zwróć tłumaczenia oddzielone separatorem |||.\n`;
